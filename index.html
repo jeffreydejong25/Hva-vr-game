@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Revalidatie VR - Met Geluid!</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+
+    <script>
+        // ==============================================
+        // 0. CANVAS SCRIPT
+        // ==============================================
+        AFRAME.registerComponent('dynamische-tekst', {
+            schema: {
+                tekst: {type: 'string', default: ''},
+                kleur: {type: 'string', default: '#FFFFFF'},
+                bgKleur: {type: 'string', default: 'transparent'},
+                fontSize: {type: 'number', default: 60}
+            },
+            init: function() {
+                this.canvas = document.createElement('canvas');
+                this.canvas.width = 1024;
+                this.canvas.height = 256;
+                this.ctx = this.canvas.getContext('2d');
+                this.texture = new THREE.CanvasTexture(this.canvas);
+                
+                const pasTextuurToe = () => {
+                    let mesh = this.el.getObject3D('mesh');
+                    if(mesh) {
+                        mesh.material.map = this.texture;
+                        if (this.data.bgKleur === 'transparent') { mesh.material.transparent = true; }
+                        mesh.material.needsUpdate = true;
+                    }
+                };
+
+                if (this.el.getObject3D('mesh')) { pasTextuurToe(); } 
+                else { this.el.addEventListener('object3dset', (e) => { if (e.detail.type === 'mesh') pasTextuurToe(); }); }
+                this.tekenTekst();
+            },
+            update: function(oudeData) {
+                if (this.data.tekst !== oudeData.tekst) { this.tekenTekst(); }
+            },
+            tekenTekst: function() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                if (this.data.bgKleur !== 'transparent') {
+                    this.ctx.fillStyle = this.data.bgKleur;
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                }
+                this.ctx.fillStyle = this.data.kleur;
+                this.ctx.font = 'bold ' + this.data.fontSize + 'px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(this.data.tekst, this.canvas.width/2, this.canvas.height/2);
+                if (this.texture) this.texture.needsUpdate = true;
+            }
+        });
+
+        // ==============================================
+        // 1. GAME MANAGER
+        // ==============================================
+        AFRAME.registerComponent('game-manager', {
+            init: function() {
+                this.menuWereld = document.querySelector('#menu-wereld');
+                this.gameWereld = document.querySelector('#game-wereld');
+                this.lucht = document.querySelector('#lucht');
+                this.fader = document.querySelector('#fader');
+                this.speler = document.querySelector('#player');
+                
+                this.levels = [
+                    { id: 1, naam: "Makkelijk", doel: 10, maxMissers: 10, interval: 3000 },
+                    { id: 2, naam: "Normaal",   doel: 20, maxMissers: 8,  interval: 2000 },
+                    { id: 3, naam: "Moeilijk",  doel: 30, maxMissers: 5,  interval: 1200 }
+                ];
+                this.huidigLevel = 0; 
+                
+                let knoppen = document.querySelectorAll('.clickable');
+                knoppen.forEach(knop => {
+                    knop.addEventListener('click', () => {
+                        document.querySelector('#audio-klik').components.sound.playSound();
+                    });
+                });
+
+                document.querySelector('#btn-start').addEventListener('click', () => this.startGame());
+                
+                document.querySelector('#btn-level').addEventListener('click', () => {
+                    this.huidigLevel++;
+                    if (this.huidigLevel >= this.levels.length) this.huidigLevel = 0; 
+                    let lvl = this.levels[this.huidigLevel];
+                    document.querySelector('#btn-level').setAttribute('dynamische-tekst', 'tekst', 'LEVEL ' + lvl.id + ': ' + lvl.naam);
+                });
+
+                this.infoBord = document.querySelector('#info-bord');
+                let btnInfo = document.querySelector('#btn-info');
+
+                btnInfo.addEventListener('click', () => {
+                    let isZichtbaar = this.infoBord.getAttribute('visible');
+                    this.infoBord.setAttribute('visible', !isZichtbaar);
+                    if (!isZichtbaar) {
+                        btnInfo.setAttribute('dynamische-tekst', 'tekst: SLUIT INFO; bgKleur: #EF476F; kleur: #FFFFFF; fontSize: 45');
+                    } else {
+                        btnInfo.setAttribute('dynamische-tekst', 'tekst: INFO; bgKleur: #FFD166; kleur: #000000; fontSize: 50');
+                    }
+                });
+            },
+            startGame: function() {
+                this.fader.emit('fade-out');
+                document.querySelector('#audio-swoosh').components.sound.playSound();
+
+                setTimeout(() => {
+                    this.menuWereld.setAttribute('visible', 'false');
+                    this.gameWereld.setAttribute('visible', 'true');
+                    this.lucht.setAttribute('color', '#87CEEB'); 
+
+                    let scene = document.querySelector('a-scene');
+                    let lvl = this.levels[this.huidigLevel];
+
+                    scene.setAttribute('score-manager', {doel: lvl.doel, maxMissers: lvl.maxMissers});
+                    scene.setAttribute('printer-spawner', {interval: lvl.interval});
+
+                    scene.components['score-manager'].resetScore();
+                    scene.components['printer-spawner'].startSpawning();
+
+                    document.querySelector('#audio-ambient').components.sound.playSound();
+                    this.fader.emit('fade-in');
+                }, 1000); 
+            },
+            endGame: function(gewonnen) {
+                let faderTekst = document.querySelector('#fader-tekst');
+                
+                if (gewonnen) {
+                    faderTekst.setAttribute('value', 'GEFELICITEERD!\nLevel Gehaald');
+                    faderTekst.setAttribute('color', '#06D6A0'); 
+                } else {
+                    faderTekst.setAttribute('value', 'HELAAS...\nProbeer het opnieuw');
+                    faderTekst.setAttribute('color', '#EF476F'); 
+                }
+
+                this.fader.emit('fade-out');
+                faderTekst.emit('fade-out'); 
+                
+                document.querySelector('#audio-swoosh').components.sound.playSound();
+                document.querySelector('#audio-ambient').components.sound.stopSound();
+
+                let scene = document.querySelector('a-scene');
+                scene.components['printer-spawner'].stopSpawning();
+
+                setTimeout(() => {
+                    this.speler.setAttribute('position', '-3 0 2');
+                    this.speler.components['muur-botsing'].vorigePos = { x: -3, z: 2 }; 
+                    this.gameWereld.setAttribute('visible', 'false');
+                    this.menuWereld.setAttribute('visible', 'true');
+                    this.lucht.setAttribute('color', '#2B2D42'); 
+                    
+                    this.fader.emit('fade-in');
+                    faderTekst.emit('fade-in'); 
+                }, 2500); 
+            }
+        });
+
+        // ==============================================
+        // 2. MUUR BOTSING
+        // ==============================================
+        AFRAME.registerComponent('muur-botsing', {
+            dependencies: ['movement-controls'], 
+            tick: function () {
+                var pos = this.el.object3D.position;
+                pos.y = 0; 
+                if (!this.vorigePos) { this.vorigePos = { x: pos.x, z: pos.z }; return; }
+                if (document.querySelector('#game-wereld').getAttribute('visible') === 'false') return;
+
+                var spelerRadius = 0.2; 
+                var muren = document.querySelectorAll('.muur');
+                function checkBotsing(testX, testZ) {
+                    var pL = testX - spelerRadius; var pR = testX + spelerRadius; 
+                    var pT = testZ - spelerRadius; var pB = testZ + spelerRadius; 
+                    for (var i = 0; i < muren.length; i++) {
+                        var muur = muren[i];
+                        var mPos = muur.getAttribute('position');
+                        var breedte = parseFloat(muur.getAttribute('width'));
+                        var diepte = parseFloat(muur.getAttribute('depth'));
+                        if (!mPos || isNaN(breedte) || isNaN(diepte)) continue;
+                        var mL = mPos.x - (breedte / 2); var mR = mPos.x + (breedte / 2);
+                        var mT = mPos.z - (diepte / 2); var mB = mPos.z + (diepte / 2);
+                        if (pR > mL && pL < mR && pB > mT && pT < mB) return true; 
+                    }
+                    return false; 
+                }
+
+                if (checkBotsing(pos.x, pos.z)) {
+                    var kanGlijdenOverX = !checkBotsing(pos.x, this.vorigePos.z);
+                    var kanGlijdenOverZ = !checkBotsing(this.vorigePos.x, pos.z);
+                    if (kanGlijdenOverX && !kanGlijdenOverZ) { pos.z = this.vorigePos.z; this.vorigePos.x = pos.x; } 
+                    else if (kanGlijdenOverZ && !kanGlijdenOverX) { pos.x = this.vorigePos.x; this.vorigePos.z = pos.z; } 
+                    else { pos.x = this.vorigePos.x; pos.z = this.vorigePos.z; }
+                } else {
+                    this.vorigePos.x = pos.x; this.vorigePos.z = pos.z;
+                }
+            }
+        });
+
+        // ==============================================
+        // 3. SCORE MANAGER
+        // ==============================================
+        AFRAME.registerComponent('score-manager', {
+            schema: { doel: {type: 'number', default: 20}, maxMissers: {type: 'number', default: 10} }, 
+            init: function() {
+                this.score = 0;
+                this.missers = 0; 
+                this.tekstBox = document.querySelector('#scorebord-box');
+            },
+            resetScore: function() {
+                this.score = 0; this.missers = 0; this.updateScorebord();
+            },
+            verhoogScore: function() {
+                if (this.score >= this.data.doel || this.missers >= this.data.maxMissers) return; 
+                this.score++; this.updateScorebord();
+                if (this.score >= this.data.doel) {
+                    document.querySelector('#audio-win').components.sound.playSound();
+                    this.el.components['game-manager'].endGame(true);
+                }
+            },
+            verhoogMissers: function() { 
+                if (this.score >= this.data.doel || this.missers >= this.data.maxMissers) return;
+                this.missers++; this.updateScorebord();
+                if (this.missers >= this.data.maxMissers) {
+                    this.el.components['game-manager'].endGame(false);
+                }
+            },
+            updateScorebord: function() { 
+                this.tekstBox.setAttribute('dynamische-tekst', 'tekst', 'Gevangen: ' + this.score + '/' + this.data.doel + ' | Gemist: ' + this.missers + '/' + this.data.maxMissers);
+            }
+        });
+
+        // ==============================================
+        // 4. VANGBAAR (Papiertjes)
+        // ==============================================
+        AFRAME.registerComponent('vangbaar', {
+            schema: { radius: {type: 'number', default: 0.4} }, 
+            tick: function() {
+                if (this.el.object3D.position.y <= 0.06) return;
+                let papierPos = this.el.object3D.position;
+                let handL = document.querySelector('#linker-hand');
+                let handR = document.querySelector('#rechter-hand');
+                let camera = document.querySelector('#camera');
+
+                let posL = new THREE.Vector3(); let posR = new THREE.Vector3(); let posCam = new THREE.Vector3();
+                let gevangen = false;
+
+                if (handL && handL.object3D) handL.object3D.getWorldPosition(posL);
+                if (handR && handR.object3D) handR.object3D.getWorldPosition(posR);
+                if (camera && camera.object3D) camera.object3D.getWorldPosition(posCam);
+
+                if (posL.distanceTo(papierPos) < this.data.radius || posR.distanceTo(papierPos) < this.data.radius || posCam.distanceTo(papierPos) < 1.0) {
+                    gevangen = true;
+                }
+
+                // Check vliegende mokken
+                let vliegendeMokken = document.querySelectorAll('.vliegend');
+                for (let i = 0; i < vliegendeMokken.length; i++) {
+                    let mokPos = new THREE.Vector3();
+                    vliegendeMokken[i].object3D.getWorldPosition(mokPos);
+                    if (mokPos.distanceTo(papierPos) < this.data.radius + 0.3) {
+                        gevangen = true;
+                        break; 
+                    }
+                }
+
+                if (gevangen) {
+                    document.querySelector('#audio-plop').components.sound.playSound();
+                    let scene = document.querySelector('a-scene');
+                    scene.components['score-manager'].verhoogScore();
+                    if (this.el.parentNode) this.el.parentNode.removeChild(this.el);
+                }
+            }
+        });
+
+        // ==============================================
+        // 5. DE PRINTER SPAWNER
+        // ==============================================
+        AFRAME.registerComponent('printer-spawner', {
+            schema: { interval: {type: 'number', default: 3000} },
+            init: function() { this.timer = null; },
+            startSpawning: function() {
+                if (this.timer) clearInterval(this.timer);
+                this.timer = setInterval(() => {
+                    document.querySelector('#audio-schiet').components.sound.playSound();
+                    let papier = document.createElement('a-entity');
+                    papier.setAttribute('class', 'papier');
+                    papier.setAttribute('geometry', 'primitive: plane; width: 0.21; height: 0.29');
+                    papier.setAttribute('material', 'color: white; side: double');
+                    papier.setAttribute('position', {x: -9.5, y: 0.8, z: 2.8}); 
+                    papier.setAttribute('dwarrel-papier', '');
+                    papier.setAttribute('vangbaar', 'radius: 0.4'); 
+                    this.el.sceneEl.appendChild(papier);
+                }, this.data.interval); 
+            },
+            stopSpawning: function() {
+                clearInterval(this.timer);
+                document.querySelectorAll('.papier').forEach(p => {
+                    if (p.parentNode) p.parentNode.removeChild(p);
+                });
+            }
+        });
+
+       // ==============================================
+        // 6. HET DWARREL-SCRIPT (Met Plafond-botsing)
+        // ==============================================
+        AFRAME.registerComponent('dwarrel-papier', {
+            init: function() {
+                this.vx = 6 + Math.random() * 8; 
+                this.vy = 4 + Math.random() * 4; 
+                this.vz = -8 + Math.random() * 16; 
+            },
+            tick: function(t, dt) {
+                let d = dt / 1000;
+                let pos = this.el.getAttribute('position');
+                let rot = this.el.getAttribute('rotation');
+
+                this.vy -= 4 * d;
+                this.vx *= 0.98; this.vz *= 0.98;
+                if (this.vy < -0.8) this.vy = -0.8; 
+
+                pos.x += this.vx * d; pos.y += this.vy * d; pos.z += this.vz * d;
+                
+                // --- NIEUW: PLAFOND CHECK ---
+                // Het plafond zit op 3 meter. We laten hem bij 2.9 meter botsen.
+                if (pos.y > 2.9) {
+                    pos.y = 2.9; // Hou hem onder het plafond
+                    this.vy = -2; // Geef hem een zetje naar beneden (stuiter-effect)
+                }
+                // ----------------------------
+
+                rot.x += (this.vx * 2) + 1; rot.y += 2; rot.z += (this.vz * 2) + 1;
+
+                this.el.setAttribute('position', pos);
+                this.el.setAttribute('rotation', rot);
+
+                if (pos.y <= 0.05) {
+                    pos.y = 0.05; rot.x = -90; rot.y = Math.random() * 360; rot.z = 0;
+                    this.el.setAttribute('position', pos);
+                    this.el.setAttribute('rotation', rot);
+                    
+                    let scene = document.querySelector('a-scene');
+                    scene.components['score-manager'].verhoogMissers();
+                    
+                    this.el.removeAttribute('vangbaar'); 
+                    this.el.removeAttribute('dwarrel-papier');
+                }
+            }
+        });
+
+        // ==============================================
+        // 7. MOK INTERACTIE (OPPAKKEN EN GOOIEN)
+        // ==============================================
+        AFRAME.registerComponent('mok-interactie', {
+            init: function() {
+                this.status = 'idle'; 
+                this.snelheid = new THREE.Vector3();
+                this.hand = null;
+                
+                this.el.addEventListener('click', (evt) => {
+                    if (this.status === 'idle') {
+                        this.status = 'vast';
+                        this.hand = evt.detail.cursorEl || document.querySelector('#camera');
+                        
+                        setTimeout(() => {
+                            this.gooiHandler = () => {
+                                if (this.status === 'vast') {
+                                    this.status = 'gooi';
+                                    this.el.setAttribute('class', 'mok vliegend');
+                                    
+                                    let richting = new THREE.Vector3(0, 0, -1);
+                                    richting.applyQuaternion(this.hand.object3D.getWorldQuaternion(new THREE.Quaternion()));
+                                    
+                                    this.snelheid.copy(richting).multiplyScalar(6); 
+                                    this.snelheid.y += 3; 
+                                    
+                                    window.removeEventListener('click', this.gooiHandler);
+                                    if (this.hand) this.hand.removeEventListener('triggerdown', this.gooiHandler);
+                                }
+                            };
+                            window.addEventListener('click', this.gooiHandler);
+                            if (this.hand) this.hand.addEventListener('triggerdown', this.gooiHandler);
+                        }, 100);
+                    }
+                });
+            },
+            tick: function(t, dt) {
+                let d = dt / 1000;
+                if (this.status === 'vast' && this.hand) {
+                    let handPos = new THREE.Vector3();
+                    let handRot = new THREE.Quaternion();
+                    this.hand.object3D.getWorldPosition(handPos);
+                    this.hand.object3D.getWorldQuaternion(handRot);
+                    
+                    let offset = new THREE.Vector3(0, 0, -0.2);
+                    offset.applyQuaternion(handRot);
+                    
+                    this.el.object3D.position.copy(handPos).add(offset);
+                    this.el.object3D.quaternion.copy(handRot);
+                } else if (this.status === 'gooi') {
+                    this.snelheid.y -= 9.81 * d; 
+                    this.el.object3D.position.x += this.snelheid.x * d;
+                    this.el.object3D.position.y += this.snelheid.y * d;
+                    this.el.object3D.position.z += this.snelheid.z * d;
+                    this.el.object3D.rotation.x += 5 * d; 
+                    
+                    if (this.el.object3D.position.y <= 0.1) {
+                        this.el.object3D.position.y = 0.1;
+                        this.status = 'idle';
+                        this.snelheid.set(0,0,0);
+                        this.el.object3D.rotation.x = 0; 
+                        this.el.setAttribute('class', 'mok clickable'); 
+                    }
+                }
+            }
+        });
+        // ==============================================
+        // 9. MUIS GEDRAG (Chaos Editie: Alle Richtingen)
+        // ==============================================
+        AFRAME.registerComponent('muis-gedrag', {
+            init: function() {
+                // Wacht tot de scene geladen is voor de eerste start
+                this.el.sceneEl.addEventListener('renderstart', () => {
+                    this.planVolgendeSprint();
+                });
+            },
+            planVolgendeSprint: function() {
+                // Wacht tussen de 4 en 10 seconden voor meer variatie
+                let wachttijd = (Math.random() * 6000) + 4000;
+                
+                setTimeout(() => {
+                    let gameZichtbaar = document.querySelector('#game-wereld').getAttribute('visible');
+                    // We checken of de game-wereld op 'true' staat (als boolean of als string)
+                    if (gameZichtbaar === true || gameZichtbaar === "true") {
+                        this.startSprint();
+                    } else {
+                        this.planVolgendeSprint();
+                    }
+                }, wachttijd);
+            },
+            startSprint: function() {
+                // DEFINIEER DE VLOER GRENZEN (gebaseerd op jouw kantoor)
+                // X loopt ongeveer van -9.5 (muur) tot -1.5 (gang)
+                // Z loopt ongeveer van 1 tot 7
+                let startX = (Math.random() * -8) - 1.5; 
+                let startZ = (Math.random() * 6) + 1;
+                
+                let eindX = (Math.random() * -8) - 1.5;
+                let eindZ = (Math.random() * 6) + 1;
+
+                // Voorkom dat start en eind te dicht bij elkaar liggen
+                let afstand = Math.sqrt(Math.pow(eindX - startX, 2) + Math.pow(eindZ - startZ, 2));
+                if (afstand < 3) { 
+                    this.startSprint(); // Probeer opnieuw als het een te kort stukje is
+                    return; 
+                }
+
+                // BEREKEN DE RICHTING (zodat de neus altijd vooruit wijst)
+                let dx = eindX - startX;
+                let dz = eindZ - startZ;
+                let hoekRad = Math.atan2(dx, dz);
+                let hoekDeg = hoekRad * (180 / Math.PI);
+
+                // ZET DE MUIS KLAAR
+                this.el.setAttribute('position', {x: startX, y: 0.02, z: startZ});
+                
+                // CORRECTIE VOOR DE NEUS:
+                // Als de muis 'zijwaarts' rent, verander dan '+ 90' naar '0' of '+ 180'
+                this.el.setAttribute('rotation', {x: 0, y: hoekDeg + 90, z: 0});
+                
+                this.el.setAttribute('visible', 'true');
+                
+                // START DE BEWEGING
+                // Snelheid berekenen: we willen dat hij ongeveer 2 meter per seconde rent
+                let looptijd = afstand * 500; // meer afstand = langere tijd
+
+                this.el.setAttribute('animation__run', {
+                    property: 'position',
+                    to: {x: eindX, y: 0.02, z: eindZ},
+                    dur: looptijd,
+                    easing: 'linear'
+                });
+
+                // VERDWIJN EN PLAN VOLGENDE
+                setTimeout(() => {
+                    this.el.setAttribute('visible', 'false');
+                    this.el.removeAttribute('animation__run'); // Belangrijk: opschonen voor volgende keer
+                    this.planVolgendeSprint();
+                }, looptijd);
+            }
+        });
+    </script>
+</head>
+<body>
+    <a-scene printer-spawner score-manager game-manager>
+        
+        <a-assets>
+            <a-asset-item id="kantoor-model" src="models/kantoor/scene.gltf"></a-asset-item>
+            <a-asset-item id="mouse-model" src="models/mouse/scene.gltf"></a-asset-item>
+            <img id="plafond-tex" src="textures/Ceiling.jpg">
+            
+            <audio id="snd-ambient" src="audio/kantoor-ambient.mp3" preload="auto"></audio>
+            <audio id="snd-klik" src="audio/knop-klik.mp3" preload="auto"></audio>
+            <audio id="snd-swoosh" src="audio/swoosh.mp3" preload="auto"></audio>
+            <audio id="snd-schiet" src="audio/printer-schiet.mp3" preload="auto"></audio>
+            <audio id="snd-plop" src="audio/vang-plop.mp3" preload="auto"></audio>
+            <audio id="snd-win" src="audio/win-succes.mp3" preload="auto"></audio>
+        </a-assets>
+
+        <a-entity id="audio-ambient" sound="src: #snd-ambient; loop: true; volume: 0.5; positional: false"></a-entity>
+        <a-entity id="audio-klik" sound="src: #snd-klik; poolSize: 4; volume: 0.8"></a-entity>
+        <a-entity id="audio-swoosh" sound="src: #snd-swoosh; poolSize: 2; volume: 0.6"></a-entity>
+        <a-entity id="audio-schiet" sound="src: #snd-schiet; poolSize: 3; volume: 0.7"></a-entity>
+        <a-entity id="audio-plop" sound="src: #snd-plop; poolSize: 5; volume: 1.0"></a-entity>
+        <a-entity id="audio-win" sound="src: #snd-win; volume: 1.0"></a-entity>
+
+        <a-light id="ambient-licht" type="ambient" color="#FFF" intensity="0.6"></a-light>
+        <a-light type="directional" position="5 10 5" intensity="0.8" target="#player"></a-light>
+
+        <a-entity id="player" position="-3 0 2" movement-controls="speed: 0.15" muur-botsing>
+            <a-entity id="camera" camera position="0 1.6 0" look-controls>
+                <a-cursor raycaster="objects: .clickable" color="#FFD166"></a-cursor>
+                <a-plane id="fader" position="0 0 -0.2" width="2" height="2" color="#000" material="opacity: 0; transparent: true; shader: flat"
+                         animation__out="property: material.opacity; from: 0; to: 1; dur: 1000; startEvents: fade-out"
+                         animation__in="property: material.opacity; from: 1; to: 0; dur: 1000; startEvents: fade-in">
+                    <a-text id="fader-tekst" value="" align="center" position="0 0 0.01" scale="0.08 0.08 0.08" color="#FFFFFF" opacity="0"
+                            animation__out="property: opacity; from: 0; to: 1; dur: 1000; startEvents: fade-out"
+                            animation__in="property: opacity; from: 1; to: 0; dur: 1000; startEvents: fade-in">
+                    </a-text>
+                </a-plane>
+            </a-entity>
+            <a-entity id="linker-hand" laser-controls="hand: left" raycaster="objects: .papier, .clickable"></a-entity>
+            <a-entity id="rechter-hand" laser-controls="hand: right" raycaster="objects: .papier, .clickable"></a-entity>
+        </a-entity> 
+
+        <a-entity id="menu-wereld" position="-3 1 2" visible="true">
+            <a-plane position="0 2.2 -2" width="4" height="1" material="shader: flat; transparent: true" 
+                     dynamische-tekst="tekst: REVALIDATIE OEFENING; kleur: #FFFFFF; fontSize: 70"></a-plane>
+
+            <a-box id="btn-start" class="clickable" position="0 1.4 -2" depth="0.1" width="2" height="0.4" material="shader: flat"
+                   dynamische-tekst="tekst: START SPEL; bgKleur: #06D6A0; kleur: #000000; fontSize: 50"
+                   animation__mouseenter="property: scale; to: 1.05 1.05 1.05; dur: 200; startEvents: mouseenter"
+                   animation__mouseleave="property: scale; to: 1 1 1; dur: 200; startEvents: mouseleave"></a-box>
+
+            <a-box id="btn-level" class="clickable" position="0 0.8 -2" depth="0.1" width="2" height="0.4" material="shader: flat"
+                   dynamische-tekst="tekst: LEVEL 1: Makkelijk; bgKleur: #118AB2; kleur: #FFFFFF; fontSize: 45"
+                   animation__mouseenter="property: scale; to: 1.05 1.05 1.05; dur: 200; startEvents: mouseenter"
+                   animation__mouseleave="property: scale; to: 1 1 1; dur: 200; startEvents: mouseleave"></a-box>
+
+            <a-box id="btn-info" class="clickable" position="0 0.2 -2" depth="0.1" width="2" height="0.4" material="shader: flat"
+                   dynamische-tekst="tekst: INFO; bgKleur: #FFD166; kleur: #000000; fontSize: 50"
+                   animation__mouseenter="property: scale; to: 1.05 1.05 1.05; dur: 200; startEvents: mouseenter"
+                   animation__mouseleave="property: scale; to: 1 1 1; dur: 200; startEvents: mouseleave"></a-box>
+
+            <a-entity id="info-bord" position="3 1 -1.5" rotation="0 -50 0" visible="false" scale="1.2 1.2 1.2">
+                <a-box position="0 0 -0.05" width="3.3" height="2.3" depth="0.05" color="#FFD166" material="shader: flat"></a-box>
+                <a-box position="0 0 0" width="3.2" height="2.2" depth="0.05" color="#222222" material="shader: flat"></a-box>
+                <a-box position="0 0.7 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: HET VERHAAL; bgKleur: #222222; kleur: #FFD166; fontSize: 70"></a-box>
+                <a-box position="0 0.45 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: De printer is op hol geslagen! Vang; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
+                <a-box position="0 0.25 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: alle belangrijke documenten.; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
+                <a-box position="0 -0.1 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: JOUW DOEL; bgKleur: #222222; kleur: #06D6A0; fontSize: 70"></a-box>
+                <a-box position="0 -0.35 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: Vang alles en manoeuvreer; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
+                <a-box position="0 -0.55 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: slim tussen de bureaus door.; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
+                <a-box position="0 -0.85 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: PAS OP: Te veel op de grond = AF!; bgKleur: #222222; kleur: #EF476F; fontSize: 45"></a-box>
+            </a-entity>
+        </a-entity>
+
+        <a-entity id="game-wereld" visible="false">
+            <a-entity gltf-model="#kantoor-model" position="0 0 0" scale="1 1 1"></a-entity>
+
+            <a-entity id="kantoor-omhuizing">
+                <a-box class="muur" 
+                    position="-10.1 1.5 5" 
+                    width="0.2" height="3" depth="10" 
+                    color="#2b5620">
+                </a-box>
+
+                <a-box class="muur" 
+                    position="-5 1.5 -0.1" 
+                    width="10" height="3" depth="0.2" 
+                    color="#2b5620">
+                </a-box>
+
+                <a-box class="muur" 
+                    position="0 1.5 5" 
+                    width="0.2" height="3" depth="10" 
+                    color="#2b5620">
+                </a-box>
+
+                <a-box class="muur" 
+                    position="-5 1.5 10" 
+                    width="10" height="3" depth="0.2" 
+                    color="#2b5620">
+                </a-box>
+            </a-entity>
+            <a-plane id="plafond" 
+                position="-5 3 5" 
+                rotation="90 0 0" 
+                width="10" height="10" 
+                material="src: #plafond-tex; repeat: 4 6; roughness: 1">
+            </a-plane>
+
+            <a-entity id="muis-container">
+                <a-entity gltf-model="#mouse-model" 
+                          scale="0.5 0.5 0.5" 
+                          muis-gedrag 
+                          visible="false">
+                </a-entity>
+            </a-entity>
+
+            <a-entity position="-9.8 2.5 2.8" rotation="0 90 0">
+                <a-box id="scorebord-box" width="4" height="1" depth="0.1" material="shader: flat"
+                       dynamische-tekst="tekst: Gevangen: 0/10 | Gemist: 0/10; bgKleur: #222222; kleur: #06D6A0; fontSize: 50">
+                </a-box>
+            </a-entity>
+
+            <a-entity id="mokken">
+                <a-cylinder class="mok clickable" mok-interactie position="-7.3 0.9 4" radius="0.08" height="0.15" color="#EF476F"></a-cylinder>
+                <a-cylinder class="mok clickable" mok-interactie position="-4.7 0.9 3.5" radius="0.08" height="0.15" color="#118AB2"></a-cylinder>
+                <a-cylinder class="mok clickable" mok-interactie position="-1 0.9 2" radius="0.08" height="0.15" color="#06D6A0"></a-cylinder>
+                <a-cylinder class="mok clickable" mok-interactie position="-1 0.9 5" radius="0.08" height="0.15" color="#FFD166"></a-cylinder>
+            </a-entity>
+
+            <a-entity id="obstructies" visible="false"> 
+                <a-box class="muur" position="-10 1.5 5" width="0.1" height="3" depth="10"></a-box>
+                <a-box class="muur" position="-5 1.5 0" width="10" height="3" depth="0.1"></a-box>
+                <a-box class="muur" position="-6 1.5 7" width="9" height="3" depth="0.1"></a-box>
+                <a-box class="muur" position="-1.5 1.5 8.5" width="0.1" height="3" depth="3"></a-box>
+                <a-box class="muur" position="-8.2 1.5 1.7" width="3.7" height="3" depth="0.1"></a-box>
+                <a-box class="muur" position="-6.3 1.5 0.9" width="0.1" height="3" depth="1.8"></a-box>
+                <a-box class="muur" position="-7.3 0.4 4" width="1.5" height="0.8" depth="2"></a-box>
+                <a-box class="muur" position="-4.7 0.4 4" width="0.7" height="0.8" depth="2"></a-box>
+                <a-box class="muur" position="-4.2 0.4 4.7" width="1" height="0.8" depth="0.7"></a-box>
+                <a-box class="muur" position="-1 0.4 3.5" width="2.2" height="0.8" depth="7"></a-box>
+            </a-entity>
+        </a-entity>
+
+        <a-sky id="lucht" color="#2B2D42"></a-sky>
+
+    </a-scene>
+</body>
+</html>
