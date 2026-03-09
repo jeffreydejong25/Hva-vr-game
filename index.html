@@ -2,13 +2,35 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Revalidatie VR - Met Geluid!</title>
+    <title>Revalidatie VR - Cross-Platform</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
 
     <script>
         // ==============================================
-        // 0. CANVAS SCRIPT
+        // 0. PLATFORM MANAGER (Nieuw: Verbergt PC cursor in VR)
+        // ==============================================
+        AFRAME.registerComponent('platform-manager', {
+            init: function() {
+                let scene = this.el;
+                let pcCursor = document.querySelector('#pc-cursor');
+
+                scene.addEventListener('enter-vr', () => {
+                    // Als we in VR gaan met een headset, verberg de neus-cursor
+                    if (scene.is('vr-mode')) {
+                        if (pcCursor) pcCursor.setAttribute('visible', 'false');
+                    }
+                });
+
+                scene.addEventListener('exit-vr', () => {
+                    // Terug naar PC? Laat de cursor weer zien
+                    if (pcCursor) pcCursor.setAttribute('visible', 'true');
+                });
+            }
+        });
+
+        // ==============================================
+        // 0.1 CANVAS SCRIPT
         // ==============================================
         AFRAME.registerComponent('dynamische-tekst', {
             schema: {
@@ -56,7 +78,7 @@
         });
 
         // ==============================================
-        // 1. GAME MANAGER
+        // 1. GAME MANAGER (Ongewijzigd, werkt perfect)
         // ==============================================
         AFRAME.registerComponent('game-manager', {
             init: function() {
@@ -158,7 +180,7 @@
         });
 
         // ==============================================
-        // 2. MUUR BOTSING
+        // 2. MUUR BOTSING (Ongewijzigd)
         // ==============================================
         AFRAME.registerComponent('muur-botsing', {
             dependencies: ['movement-controls'], 
@@ -199,7 +221,7 @@
         });
 
         // ==============================================
-        // 3. SCORE MANAGER
+        // 3. SCORE MANAGER (Ongewijzigd)
         // ==============================================
         AFRAME.registerComponent('score-manager', {
             schema: { doel: {type: 'number', default: 20}, maxMissers: {type: 'number', default: 10} }, 
@@ -232,7 +254,7 @@
         });
 
         // ==============================================
-        // 4. VANGBAAR (Papiertjes)
+        // 4. VANGBAAR (Papiertjes) - Ongewijzigd, was al hybride!
         // ==============================================
         AFRAME.registerComponent('vangbaar', {
             schema: { radius: {type: 'number', default: 0.4} }, 
@@ -254,7 +276,6 @@
                     gevangen = true;
                 }
 
-                // Check vliegende mokken
                 let vliegendeMokken = document.querySelectorAll('.vliegend');
                 for (let i = 0; i < vliegendeMokken.length; i++) {
                     let mokPos = new THREE.Vector3();
@@ -302,7 +323,7 @@
             }
         });
 
-       // ==============================================
+        // ==============================================
         // 6. HET DWARREL-SCRIPT (Met Plafond-botsing)
         // ==============================================
         AFRAME.registerComponent('dwarrel-papier', {
@@ -322,13 +343,10 @@
 
                 pos.x += this.vx * d; pos.y += this.vy * d; pos.z += this.vz * d;
                 
-                // --- NIEUW: PLAFOND CHECK ---
-                // Het plafond zit op 3 meter. We laten hem bij 2.9 meter botsen.
                 if (pos.y > 2.9) {
-                    pos.y = 2.9; // Hou hem onder het plafond
-                    this.vy = -2; // Geef hem een zetje naar beneden (stuiter-effect)
+                    pos.y = 2.9; 
+                    this.vy = -2; 
                 }
-                // ----------------------------
 
                 rot.x += (this.vx * 2) + 1; rot.y += 2; rot.z += (this.vz * 2) + 1;
 
@@ -350,7 +368,7 @@
         });
 
         // ==============================================
-        // 7. MOK INTERACTIE (OPPAKKEN EN GOOIEN)
+        // 7. MOK INTERACTIE (Hybride Update!)
         // ==============================================
         AFRAME.registerComponent('mok-interactie', {
             init: function() {
@@ -358,9 +376,11 @@
                 this.snelheid = new THREE.Vector3();
                 this.hand = null;
                 
+                // Zowel PC-klik als VR-laser triggeren een 'click' event
                 this.el.addEventListener('click', (evt) => {
                     if (this.status === 'idle') {
                         this.status = 'vast';
+                        // evt.detail.cursorEl vertelt ons wie de mok oppakte (Camera of VR Hand)
                         this.hand = evt.detail.cursorEl || document.querySelector('#camera');
                         
                         setTimeout(() => {
@@ -375,12 +395,25 @@
                                     this.snelheid.copy(richting).multiplyScalar(6); 
                                     this.snelheid.y += 3; 
                                     
-                                    window.removeEventListener('click', this.gooiHandler);
-                                    if (this.hand) this.hand.removeEventListener('triggerdown', this.gooiHandler);
+                                    // Verwijder de gooi-listener afhankelijk van het platform
+                                    if (this.isVRHand) {
+                                        this.hand.removeEventListener('triggerdown', this.gooiHandler);
+                                    } else {
+                                        window.removeEventListener('click', this.gooiHandler);
+                                    }
                                 }
                             };
-                            window.addEventListener('click', this.gooiHandler);
-                            if (this.hand) this.hand.addEventListener('triggerdown', this.gooiHandler);
+                            
+                            // Bepaal of de 'hand' een VR controller is of de PC camera
+                            this.isVRHand = this.hand.hasAttribute('laser-controls');
+
+                            if (this.isVRHand) {
+                                // In VR gooi je door de trigger achterop in te drukken
+                                this.hand.addEventListener('triggerdown', this.gooiHandler);
+                            } else {
+                                // Op PC gooi je met een nieuwe muisklik
+                                window.addEventListener('click', this.gooiHandler);
+                            }
                         }, 100);
                     }
                 });
@@ -393,7 +426,9 @@
                     this.hand.object3D.getWorldPosition(handPos);
                     this.hand.object3D.getWorldQuaternion(handRot);
                     
-                    let offset = new THREE.Vector3(0, 0, -0.2);
+                    // In VR zetten we de mok iets naar voren in de hand. Op PC iets voor de camera.
+                    let offsetZ = this.isVRHand ? -0.1 : -0.3;
+                    let offset = new THREE.Vector3(0, -0.05, offsetZ);
                     offset.applyQuaternion(handRot);
                     
                     this.el.object3D.position.copy(handPos).add(offset);
@@ -415,23 +450,20 @@
                 }
             }
         });
+
         // ==============================================
-        // 9. MUIS GEDRAG (Chaos Editie: Alle Richtingen)
+        // 8. MUIS GEDRAG (Ongewijzigd)
         // ==============================================
         AFRAME.registerComponent('muis-gedrag', {
             init: function() {
-                // Wacht tot de scene geladen is voor de eerste start
                 this.el.sceneEl.addEventListener('renderstart', () => {
                     this.planVolgendeSprint();
                 });
             },
             planVolgendeSprint: function() {
-                // Wacht tussen de 4 en 10 seconden voor meer variatie
                 let wachttijd = (Math.random() * 6000) + 4000;
-                
                 setTimeout(() => {
                     let gameZichtbaar = document.querySelector('#game-wereld').getAttribute('visible');
-                    // We checken of de game-wereld op 'true' staat (als boolean of als string)
                     if (gameZichtbaar === true || gameZichtbaar === "true") {
                         this.startSprint();
                     } else {
@@ -440,40 +472,27 @@
                 }, wachttijd);
             },
             startSprint: function() {
-                // DEFINIEER DE VLOER GRENZEN (gebaseerd op jouw kantoor)
-                // X loopt ongeveer van -9.5 (muur) tot -1.5 (gang)
-                // Z loopt ongeveer van 1 tot 7
                 let startX = (Math.random() * -8) - 1.5; 
                 let startZ = (Math.random() * 6) + 1;
-                
                 let eindX = (Math.random() * -8) - 1.5;
                 let eindZ = (Math.random() * 6) + 1;
 
-                // Voorkom dat start en eind te dicht bij elkaar liggen
                 let afstand = Math.sqrt(Math.pow(eindX - startX, 2) + Math.pow(eindZ - startZ, 2));
                 if (afstand < 3) { 
-                    this.startSprint(); // Probeer opnieuw als het een te kort stukje is
+                    this.startSprint(); 
                     return; 
                 }
 
-                // BEREKEN DE RICHTING (zodat de neus altijd vooruit wijst)
                 let dx = eindX - startX;
                 let dz = eindZ - startZ;
                 let hoekRad = Math.atan2(dx, dz);
                 let hoekDeg = hoekRad * (180 / Math.PI);
 
-                // ZET DE MUIS KLAAR
                 this.el.setAttribute('position', {x: startX, y: 0.02, z: startZ});
-                
-                // CORRECTIE VOOR DE NEUS:
-                // Als de muis 'zijwaarts' rent, verander dan '+ 90' naar '0' of '+ 180'
                 this.el.setAttribute('rotation', {x: 0, y: hoekDeg + 90, z: 0});
-                
                 this.el.setAttribute('visible', 'true');
                 
-                // START DE BEWEGING
-                // Snelheid berekenen: we willen dat hij ongeveer 2 meter per seconde rent
-                let looptijd = afstand * 500; // meer afstand = langere tijd
+                let looptijd = afstand * 500; 
 
                 this.el.setAttribute('animation__run', {
                     property: 'position',
@@ -482,10 +501,9 @@
                     easing: 'linear'
                 });
 
-                // VERDWIJN EN PLAN VOLGENDE
                 setTimeout(() => {
                     this.el.setAttribute('visible', 'false');
-                    this.el.removeAttribute('animation__run'); // Belangrijk: opschonen voor volgende keer
+                    this.el.removeAttribute('animation__run'); 
                     this.planVolgendeSprint();
                 }, looptijd);
             }
@@ -493,7 +511,7 @@
     </script>
 </head>
 <body>
-    <a-scene printer-spawner score-manager game-manager>
+    <a-scene platform-manager printer-spawner score-manager game-manager>
         
         <a-assets>
             <a-asset-item id="kantoor-model" src="models/kantoor/scene.gltf"></a-asset-item>
@@ -520,7 +538,8 @@
 
         <a-entity id="player" position="-3 0 2" movement-controls="speed: 0.15" muur-botsing>
             <a-entity id="camera" camera position="0 1.6 0" look-controls>
-                <a-cursor raycaster="objects: .clickable" color="#FFD166"></a-cursor>
+                <a-cursor id="pc-cursor" raycaster="objects: .clickable" color="#FFD166"></a-cursor>
+                
                 <a-plane id="fader" position="0 0 -0.2" width="2" height="2" color="#000" material="opacity: 0; transparent: true; shader: flat"
                          animation__out="property: material.opacity; from: 0; to: 1; dur: 1000; startEvents: fade-out"
                          animation__in="property: material.opacity; from: 1; to: 0; dur: 1000; startEvents: fade-in">
@@ -530,8 +549,9 @@
                     </a-text>
                 </a-plane>
             </a-entity>
-            <a-entity id="linker-hand" laser-controls="hand: left" raycaster="objects: .papier, .clickable"></a-entity>
-            <a-entity id="rechter-hand" laser-controls="hand: right" raycaster="objects: .papier, .clickable"></a-entity>
+            
+            <a-entity id="linker-hand" laser-controls="hand: left" raycaster="objects: .papier, .clickable, .mok"></a-entity>
+            <a-entity id="rechter-hand" laser-controls="hand: right" raycaster="objects: .papier, .clickable, .mok"></a-entity>
         </a-entity> 
 
         <a-entity id="menu-wereld" position="-3 1 2" visible="true">
@@ -577,43 +597,15 @@
             <a-entity gltf-model="#kantoor-model" position="0 0 0" scale="1 1 1"></a-entity>
 
             <a-entity id="kantoor-omhuizing">
-                <a-box class="muur" 
-                    position="-10.1 1.5 5" 
-                    width="0.2" height="3" depth="10" 
-                    color="#2b5620">
-                </a-box>
-
-                <a-box class="muur" 
-                    position="-5 1.5 -0.1" 
-                    width="10" height="3" depth="0.2" 
-                    color="#2b5620">
-                </a-box>
-
-                <a-box class="muur" 
-                    position="0 1.5 5" 
-                    width="0.2" height="3" depth="10" 
-                    color="#2b5620">
-                </a-box>
-
-                <a-box class="muur" 
-                    position="-5 1.5 10" 
-                    width="10" height="3" depth="0.2" 
-                    color="#2b5620">
-                </a-box>
+                <a-box class="muur" position="-10.1 1.5 5" width="0.2" height="3" depth="10" color="#2b5620"></a-box>
+                <a-box class="muur" position="-5 1.5 -0.1" width="10" height="3" depth="0.2" color="#2b5620"></a-box>
+                <a-box class="muur" position="0 1.5 5" width="0.2" height="3" depth="10" color="#2b5620"></a-box>
+                <a-box class="muur" position="-5 1.5 10" width="10" height="3" depth="0.2" color="#2b5620"></a-box>
             </a-entity>
-            <a-plane id="plafond" 
-                position="-5 3 5" 
-                rotation="90 0 0" 
-                width="10" height="10" 
-                material="src: #plafond-tex; repeat: 4 6; roughness: 1">
-            </a-plane>
+            <a-plane id="plafond" position="-5 3 5" rotation="90 0 0" width="10" height="10" material="src: #plafond-tex; repeat: 4 6; roughness: 1"></a-plane>
 
             <a-entity id="muis-container">
-                <a-entity gltf-model="#mouse-model" 
-                          scale="0.5 0.5 0.5" 
-                          muis-gedrag 
-                          visible="false">
-                </a-entity>
+                <a-entity gltf-model="#mouse-model" scale="0.5 0.5 0.5" muis-gedrag visible="false"></a-entity>
             </a-entity>
 
             <a-entity position="-9.8 2.5 2.8" rotation="0 90 0">
