@@ -8,23 +8,23 @@
 
     <script>
         // ==============================================
-        // 0. PLATFORM MANAGER (Nieuw: Verbergt PC cursor in VR)
+        // 0. PLATFORM MANAGER
         // ==============================================
         AFRAME.registerComponent('platform-manager', {
             init: function() {
-                let scene = this.el;
-                let pcCursor = document.querySelector('#pc-cursor');
+                const scene = this.el;
+                const pcCursor = document.querySelector('#pc-cursor');
 
                 scene.addEventListener('enter-vr', () => {
-                    // Als we in VR gaan met een headset, verberg de neus-cursor
-                    if (scene.is('vr-mode')) {
-                        if (pcCursor) pcCursor.setAttribute('visible', 'false');
+                    if (scene.is('vr-mode') && pcCursor) {
+                        pcCursor.setAttribute('visible', 'false');
                     }
                 });
 
                 scene.addEventListener('exit-vr', () => {
-                    // Terug naar PC? Laat de cursor weer zien
-                    if (pcCursor) pcCursor.setAttribute('visible', 'true');
+                    if (pcCursor) {
+                        pcCursor.setAttribute('visible', 'true');
+                    }
                 });
             }
         });
@@ -47,38 +47,53 @@
                 this.texture = new THREE.CanvasTexture(this.canvas);
                 
                 const pasTextuurToe = () => {
-                    let mesh = this.el.getObject3D('mesh');
-                    if(mesh) {
+                    const mesh = this.el.getObject3D('mesh');
+                    if (mesh) {
                         mesh.material.map = this.texture;
-                        if (this.data.bgKleur === 'transparent') { mesh.material.transparent = true; }
+                        if (this.data.bgKleur === 'transparent') { 
+                            mesh.material.transparent = true; 
+                        }
                         mesh.material.needsUpdate = true;
                     }
                 };
 
-                if (this.el.getObject3D('mesh')) { pasTextuurToe(); } 
-                else { this.el.addEventListener('object3dset', (e) => { if (e.detail.type === 'mesh') pasTextuurToe(); }); }
+                if (this.el.getObject3D('mesh')) { 
+                    pasTextuurToe(); 
+                } else { 
+                    this.el.addEventListener('object3dset', (e) => { 
+                        if (e.detail.type === 'mesh') pasTextuurToe(); 
+                    }); 
+                }
+                
                 this.tekenTekst();
             },
             update: function(oudeData) {
-                if (this.data.tekst !== oudeData.tekst) { this.tekenTekst(); }
+                if (this.data.tekst !== oudeData.tekst) { 
+                    this.tekenTekst(); 
+                }
             },
             tekenTekst: function() {
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
                 if (this.data.bgKleur !== 'transparent') {
                     this.ctx.fillStyle = this.data.bgKleur;
                     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                 }
+                
                 this.ctx.fillStyle = this.data.kleur;
-                this.ctx.font = 'bold ' + this.data.fontSize + 'px Arial';
+                this.ctx.font = `bold ${this.data.fontSize}px Arial`;
                 this.ctx.textAlign = 'center';
                 this.ctx.textBaseline = 'middle';
-                this.ctx.fillText(this.data.tekst, this.canvas.width/2, this.canvas.height/2);
-                if (this.texture) this.texture.needsUpdate = true;
+                this.ctx.fillText(this.data.tekst, this.canvas.width / 2, this.canvas.height / 2);
+                
+                if (this.texture) {
+                    this.texture.needsUpdate = true;
+                }
             }
         });
 
         // ==============================================
-        // 1. GAME MANAGER (Ongewijzigd, werkt perfect)
+        // 1. GAME MANAGER
         // ==============================================
         AFRAME.registerComponent('game-manager', {
             init: function() {
@@ -87,6 +102,7 @@
                 this.lucht = document.querySelector('#lucht');
                 this.fader = document.querySelector('#fader');
                 this.speler = document.querySelector('#player');
+                this.scene = document.querySelector('a-scene');
                 
                 this.levels = [
                     { id: 1, naam: "Makkelijk", doel: 10, maxMissers: 10, interval: 3000 },
@@ -95,7 +111,7 @@
                 ];
                 this.huidigLevel = 0; 
                 
-                let knoppen = document.querySelectorAll('.clickable');
+                const knoppen = document.querySelectorAll('.clickable');
                 knoppen.forEach(knop => {
                     knop.addEventListener('click', () => {
                         document.querySelector('#audio-klik').components.sound.playSound();
@@ -104,19 +120,23 @@
 
                 document.querySelector('#btn-start').addEventListener('click', () => this.startGame());
                 
-                document.querySelector('#btn-level').addEventListener('click', () => {
+                const btnLevel = document.querySelector('#btn-level');
+                btnLevel.addEventListener('click', () => {
                     this.huidigLevel++;
-                    if (this.huidigLevel >= this.levels.length) this.huidigLevel = 0; 
-                    let lvl = this.levels[this.huidigLevel];
-                    document.querySelector('#btn-level').setAttribute('dynamische-tekst', 'tekst', 'LEVEL ' + lvl.id + ': ' + lvl.naam);
+                    if (this.huidigLevel >= this.levels.length) {
+                        this.huidigLevel = 0; 
+                    }
+                    const lvl = this.levels[this.huidigLevel];
+                    btnLevel.setAttribute('dynamische-tekst', 'tekst', `LEVEL ${lvl.id}: ${lvl.naam}`);
                 });
 
                 this.infoBord = document.querySelector('#info-bord');
-                let btnInfo = document.querySelector('#btn-info');
+                const btnInfo = document.querySelector('#btn-info');
 
                 btnInfo.addEventListener('click', () => {
-                    let isZichtbaar = this.infoBord.getAttribute('visible');
+                    const isZichtbaar = this.infoBord.getAttribute('visible');
                     this.infoBord.setAttribute('visible', !isZichtbaar);
+                    
                     if (!isZichtbaar) {
                         btnInfo.setAttribute('dynamische-tekst', 'tekst: SLUIT INFO; bgKleur: #EF476F; kleur: #FFFFFF; fontSize: 45');
                     } else {
@@ -133,21 +153,20 @@
                     this.gameWereld.setAttribute('visible', 'true');
                     this.lucht.setAttribute('color', '#87CEEB'); 
 
-                    let scene = document.querySelector('a-scene');
-                    let lvl = this.levels[this.huidigLevel];
+                    const lvl = this.levels[this.huidigLevel];
 
-                    scene.setAttribute('score-manager', {doel: lvl.doel, maxMissers: lvl.maxMissers});
-                    scene.setAttribute('printer-spawner', {interval: lvl.interval});
+                    this.scene.setAttribute('score-manager', {doel: lvl.doel, maxMissers: lvl.maxMissers});
+                    this.scene.setAttribute('printer-spawner', {interval: lvl.interval});
 
-                    scene.components['score-manager'].resetScore();
-                    scene.components['printer-spawner'].startSpawning();
+                    this.scene.components['score-manager'].resetScore();
+                    this.scene.components['printer-spawner'].startSpawning();
 
                     document.querySelector('#audio-ambient').components.sound.playSound();
                     this.fader.emit('fade-in');
                 }, 1000); 
             },
             endGame: function(gewonnen) {
-                let faderTekst = document.querySelector('#fader-tekst');
+                const faderTekst = document.querySelector('#fader-tekst');
                 
                 if (gewonnen) {
                     faderTekst.setAttribute('value', 'GEFELICITEERD!\nLevel Gehaald');
@@ -163,8 +182,7 @@
                 document.querySelector('#audio-swoosh').components.sound.playSound();
                 document.querySelector('#audio-ambient').components.sound.stopSound();
 
-                let scene = document.querySelector('a-scene');
-                scene.components['printer-spawner'].stopSpawning();
+                this.scene.components['printer-spawner'].stopSpawning();
 
                 setTimeout(() => {
                     this.speler.setAttribute('position', '-3 0 2');
@@ -180,62 +198,94 @@
         });
 
         // ==============================================
-        // 2. MUUR BOTSING (Ongewijzigd)
+        // 2. MUUR BOTSING
         // ==============================================
         AFRAME.registerComponent('muur-botsing', {
             dependencies: ['movement-controls'], 
+            init: function() {
+                this.muren = document.querySelectorAll('.muur');
+                this.gameWereld = document.querySelector('#game-wereld');
+                this.spelerRadius = 0.2;
+            },
             tick: function () {
-                var pos = this.el.object3D.position;
+                const pos = this.el.object3D.position;
                 pos.y = 0; 
-                if (!this.vorigePos) { this.vorigePos = { x: pos.x, z: pos.z }; return; }
-                if (document.querySelector('#game-wereld').getAttribute('visible') === 'false') return;
+                
+                if (!this.vorigePos) { 
+                    this.vorigePos = { x: pos.x, z: pos.z }; 
+                    return; 
+                }
+                
+                if (this.gameWereld.getAttribute('visible') === 'false') return;
 
-                var spelerRadius = 0.2; 
-                var muren = document.querySelectorAll('.muur');
-                function checkBotsing(testX, testZ) {
-                    var pL = testX - spelerRadius; var pR = testX + spelerRadius; 
-                    var pT = testZ - spelerRadius; var pB = testZ + spelerRadius; 
-                    for (var i = 0; i < muren.length; i++) {
-                        var muur = muren[i];
-                        var mPos = muur.getAttribute('position');
-                        var breedte = parseFloat(muur.getAttribute('width'));
-                        var diepte = parseFloat(muur.getAttribute('depth'));
+                const checkBotsing = (testX, testZ) => {
+                    const pL = testX - this.spelerRadius; 
+                    const pR = testX + this.spelerRadius; 
+                    const pT = testZ - this.spelerRadius; 
+                    const pB = testZ + this.spelerRadius; 
+                    
+                    for (let i = 0; i < this.muren.length; i++) {
+                        const muur = this.muren[i];
+                        const mPos = muur.getAttribute('position');
+                        const breedte = parseFloat(muur.getAttribute('width'));
+                        const diepte = parseFloat(muur.getAttribute('depth'));
+                        
                         if (!mPos || isNaN(breedte) || isNaN(diepte)) continue;
-                        var mL = mPos.x - (breedte / 2); var mR = mPos.x + (breedte / 2);
-                        var mT = mPos.z - (diepte / 2); var mB = mPos.z + (diepte / 2);
+                        
+                        const mL = mPos.x - (breedte / 2); 
+                        const mR = mPos.x + (breedte / 2);
+                        const mT = mPos.z - (diepte / 2);  
+                        const mB = mPos.z + (diepte / 2);
+                        
                         if (pR > mL && pL < mR && pB > mT && pT < mB) return true; 
                     }
                     return false; 
-                }
+                };
 
                 if (checkBotsing(pos.x, pos.z)) {
-                    var kanGlijdenOverX = !checkBotsing(pos.x, this.vorigePos.z);
-                    var kanGlijdenOverZ = !checkBotsing(this.vorigePos.x, pos.z);
-                    if (kanGlijdenOverX && !kanGlijdenOverZ) { pos.z = this.vorigePos.z; this.vorigePos.x = pos.x; } 
-                    else if (kanGlijdenOverZ && !kanGlijdenOverX) { pos.x = this.vorigePos.x; this.vorigePos.z = pos.z; } 
-                    else { pos.x = this.vorigePos.x; pos.z = this.vorigePos.z; }
+                    const kanGlijdenOverX = !checkBotsing(pos.x, this.vorigePos.z);
+                    const kanGlijdenOverZ = !checkBotsing(this.vorigePos.x, pos.z);
+                    
+                    if (kanGlijdenOverX && !kanGlijdenOverZ) { 
+                        pos.z = this.vorigePos.z; 
+                        this.vorigePos.x = pos.x; 
+                    } else if (kanGlijdenOverZ && !kanGlijdenOverX) { 
+                        pos.x = this.vorigePos.x; 
+                        this.vorigePos.z = pos.z; 
+                    } else { 
+                        pos.x = this.vorigePos.x; 
+                        pos.z = this.vorigePos.z; 
+                    }
                 } else {
-                    this.vorigePos.x = pos.x; this.vorigePos.z = pos.z;
+                    this.vorigePos.x = pos.x; 
+                    this.vorigePos.z = pos.z;
                 }
             }
         });
 
         // ==============================================
-        // 3. SCORE MANAGER (Ongewijzigd)
+        // 3. SCORE MANAGER
         // ==============================================
         AFRAME.registerComponent('score-manager', {
-            schema: { doel: {type: 'number', default: 20}, maxMissers: {type: 'number', default: 10} }, 
+            schema: { 
+                doel: {type: 'number', default: 20}, 
+                maxMissers: {type: 'number', default: 10} 
+            }, 
             init: function() {
                 this.score = 0;
                 this.missers = 0; 
                 this.tekstBox = document.querySelector('#scorebord-box');
             },
             resetScore: function() {
-                this.score = 0; this.missers = 0; this.updateScorebord();
+                this.score = 0; 
+                this.missers = 0; 
+                this.updateScorebord();
             },
             verhoogScore: function() {
                 if (this.score >= this.data.doel || this.missers >= this.data.maxMissers) return; 
-                this.score++; this.updateScorebord();
+                this.score++; 
+                this.updateScorebord();
+                
                 if (this.score >= this.data.doel) {
                     document.querySelector('#audio-win').components.sound.playSound();
                     this.el.components['game-manager'].endGame(true);
@@ -243,54 +293,73 @@
             },
             verhoogMissers: function() { 
                 if (this.score >= this.data.doel || this.missers >= this.data.maxMissers) return;
-                this.missers++; this.updateScorebord();
+                this.missers++; 
+                this.updateScorebord();
+                
                 if (this.missers >= this.data.maxMissers) {
                     this.el.components['game-manager'].endGame(false);
                 }
             },
             updateScorebord: function() { 
-                this.tekstBox.setAttribute('dynamische-tekst', 'tekst', 'Gevangen: ' + this.score + '/' + this.data.doel + ' | Gemist: ' + this.missers + '/' + this.data.maxMissers);
+                this.tekstBox.setAttribute(
+                    'dynamische-tekst', 
+                    'tekst', 
+                    `Gevangen: ${this.score}/${this.data.doel} | Gemist: ${this.missers}/${this.data.maxMissers}`
+                );
             }
         });
 
         // ==============================================
-        // 4. VANGBAAR (Papiertjes) - Ongewijzigd, was al hybride!
+        // 4. VANGBAAR
         // ==============================================
         AFRAME.registerComponent('vangbaar', {
             schema: { radius: {type: 'number', default: 0.4} }, 
+            init: function() {
+                // Cache elementen en vectoren in init om garbage collection stutter in tick te voorkomen
+                this.handL = document.querySelector('#linker-hand');
+                this.handR = document.querySelector('#rechter-hand');
+                this.camera = document.querySelector('#camera');
+                this.scene = document.querySelector('a-scene');
+                
+                this.posL = new THREE.Vector3(); 
+                this.posR = new THREE.Vector3(); 
+                this.posCam = new THREE.Vector3();
+                this.mokPos = new THREE.Vector3();
+            },
             tick: function() {
                 if (this.el.object3D.position.y <= 0.06) return;
-                let papierPos = this.el.object3D.position;
-                let handL = document.querySelector('#linker-hand');
-                let handR = document.querySelector('#rechter-hand');
-                let camera = document.querySelector('#camera');
-
-                let posL = new THREE.Vector3(); let posR = new THREE.Vector3(); let posCam = new THREE.Vector3();
+                
+                const papierPos = this.el.object3D.position;
                 let gevangen = false;
 
-                if (handL && handL.object3D) handL.object3D.getWorldPosition(posL);
-                if (handR && handR.object3D) handR.object3D.getWorldPosition(posR);
-                if (camera && camera.object3D) camera.object3D.getWorldPosition(posCam);
+                if (this.handL && this.handL.object3D) this.handL.object3D.getWorldPosition(this.posL);
+                if (this.handR && this.handR.object3D) this.handR.object3D.getWorldPosition(this.posR);
+                if (this.camera && this.camera.object3D) this.camera.object3D.getWorldPosition(this.posCam);
 
-                if (posL.distanceTo(papierPos) < this.data.radius || posR.distanceTo(papierPos) < this.data.radius || posCam.distanceTo(papierPos) < 1.0) {
+                if (this.posL.distanceTo(papierPos) < this.data.radius || 
+                    this.posR.distanceTo(papierPos) < this.data.radius || 
+                    this.posCam.distanceTo(papierPos) < 1.0) {
                     gevangen = true;
                 }
 
-                let vliegendeMokken = document.querySelectorAll('.vliegend');
-                for (let i = 0; i < vliegendeMokken.length; i++) {
-                    let mokPos = new THREE.Vector3();
-                    vliegendeMokken[i].object3D.getWorldPosition(mokPos);
-                    if (mokPos.distanceTo(papierPos) < this.data.radius + 0.3) {
-                        gevangen = true;
-                        break; 
+                // Zoek alleen naar mokken als we nog niet gevangen zijn
+                if (!gevangen) {
+                    const vliegendeMokken = document.querySelectorAll('.vliegend');
+                    for (let i = 0; i < vliegendeMokken.length; i++) {
+                        vliegendeMokken[i].object3D.getWorldPosition(this.mokPos);
+                        if (this.mokPos.distanceTo(papierPos) < this.data.radius + 0.3) {
+                            gevangen = true;
+                            break; 
+                        }
                     }
                 }
 
                 if (gevangen) {
                     document.querySelector('#audio-plop').components.sound.playSound();
-                    let scene = document.querySelector('a-scene');
-                    scene.components['score-manager'].verhoogScore();
-                    if (this.el.parentNode) this.el.parentNode.removeChild(this.el);
+                    this.scene.components['score-manager'].verhoogScore();
+                    if (this.el.parentNode) {
+                        this.el.parentNode.removeChild(this.el);
+                    }
                 }
             }
         });
@@ -300,23 +369,29 @@
         // ==============================================
         AFRAME.registerComponent('printer-spawner', {
             schema: { interval: {type: 'number', default: 3000} },
-            init: function() { this.timer = null; },
+            init: function() { 
+                this.timer = null; 
+            },
             startSpawning: function() {
                 if (this.timer) clearInterval(this.timer);
+                
                 this.timer = setInterval(() => {
                     document.querySelector('#audio-schiet').components.sound.playSound();
-                    let papier = document.createElement('a-entity');
+                    
+                    const papier = document.createElement('a-entity');
                     papier.setAttribute('class', 'papier');
                     papier.setAttribute('geometry', 'primitive: plane; width: 0.21; height: 0.29');
                     papier.setAttribute('material', 'color: white; side: double');
                     papier.setAttribute('position', {x: -9.5, y: 0.8, z: 2.8}); 
                     papier.setAttribute('dwarrel-papier', '');
                     papier.setAttribute('vangbaar', 'radius: 0.4'); 
+                    
                     this.el.sceneEl.appendChild(papier);
                 }, this.data.interval); 
             },
             stopSpawning: function() {
-                clearInterval(this.timer);
+                if (this.timer) clearInterval(this.timer);
+                
                 document.querySelectorAll('.papier').forEach(p => {
                     if (p.parentNode) p.parentNode.removeChild(p);
                 });
@@ -324,42 +399,52 @@
         });
 
         // ==============================================
-        // 6. HET DWARREL-SCRIPT (Met Plafond-botsing)
+        // 6. HET DWARREL-SCRIPT
         // ==============================================
         AFRAME.registerComponent('dwarrel-papier', {
             init: function() {
                 this.vx = 6 + Math.random() * 8; 
                 this.vy = 4 + Math.random() * 4; 
                 this.vz = -8 + Math.random() * 16; 
+                this.scene = document.querySelector('a-scene');
             },
             tick: function(t, dt) {
-                let d = dt / 1000;
-                let pos = this.el.getAttribute('position');
-                let rot = this.el.getAttribute('rotation');
+                const d = dt / 1000;
+                const pos = this.el.getAttribute('position');
+                const rot = this.el.getAttribute('rotation');
 
                 this.vy -= 4 * d;
-                this.vx *= 0.98; this.vz *= 0.98;
+                this.vx *= 0.98; 
+                this.vz *= 0.98;
+                
                 if (this.vy < -0.8) this.vy = -0.8; 
 
-                pos.x += this.vx * d; pos.y += this.vy * d; pos.z += this.vz * d;
+                pos.x += this.vx * d; 
+                pos.y += this.vy * d; 
+                pos.z += this.vz * d;
                 
                 if (pos.y > 2.9) {
                     pos.y = 2.9; 
                     this.vy = -2; 
                 }
 
-                rot.x += (this.vx * 2) + 1; rot.y += 2; rot.z += (this.vz * 2) + 1;
+                rot.x += (this.vx * 2) + 1; 
+                rot.y += 2; 
+                rot.z += (this.vz * 2) + 1;
 
                 this.el.setAttribute('position', pos);
                 this.el.setAttribute('rotation', rot);
 
                 if (pos.y <= 0.05) {
-                    pos.y = 0.05; rot.x = -90; rot.y = Math.random() * 360; rot.z = 0;
+                    pos.y = 0.05; 
+                    rot.x = -90; 
+                    rot.y = Math.random() * 360; 
+                    rot.z = 0;
+                    
                     this.el.setAttribute('position', pos);
                     this.el.setAttribute('rotation', rot);
                     
-                    let scene = document.querySelector('a-scene');
-                    scene.components['score-manager'].verhoogMissers();
+                    this.scene.components['score-manager'].verhoogMissers();
                     
                     this.el.removeAttribute('vangbaar'); 
                     this.el.removeAttribute('dwarrel-papier');
@@ -368,7 +453,7 @@
         });
 
         // ==============================================
-        // 7. MOK INTERACTIE (Hybride Update!)
+        // 7. MOK INTERACTIE
         // ==============================================
         AFRAME.registerComponent('mok-interactie', {
             init: function() {
@@ -376,11 +461,14 @@
                 this.snelheid = new THREE.Vector3();
                 this.hand = null;
                 
-                // Zowel PC-klik als VR-laser triggeren een 'click' event
+                // Voorkom aanmaken van nieuwe vectoren in tick
+                this.handPos = new THREE.Vector3();
+                this.handRot = new THREE.Quaternion();
+                this.gooiRichting = new THREE.Vector3();
+                
                 this.el.addEventListener('click', (evt) => {
                     if (this.status === 'idle') {
                         this.status = 'vast';
-                        // evt.detail.cursorEl vertelt ons wie de mok oppakte (Camera of VR Hand)
                         this.hand = evt.detail.cursorEl || document.querySelector('#camera');
                         
                         setTimeout(() => {
@@ -389,29 +477,26 @@
                                     this.status = 'gooi';
                                     this.el.setAttribute('class', 'mok vliegend');
                                     
-                                    let richting = new THREE.Vector3(0, 0, -1);
-                                    richting.applyQuaternion(this.hand.object3D.getWorldQuaternion(new THREE.Quaternion()));
+                                    this.gooiRichting.set(0, 0, -1);
+                                    this.gooiRichting.applyQuaternion(this.hand.object3D.getWorldQuaternion(new THREE.Quaternion()));
                                     
-                                    this.snelheid.copy(richting).multiplyScalar(6); 
+                                    this.snelheid.copy(this.gooiRichting).multiplyScalar(6); 
                                     this.snelheid.y += 3; 
                                     
-                                    // Verwijder de gooi-listener afhankelijk van het platform
                                     if (this.isVRHand) {
-                                        this.hand.removeEventListener('triggerdown', this.gooiHandler);
+                                        this.hand.removeEventListener('triggerup', this.gooiHandler);
                                     } else {
                                         window.removeEventListener('click', this.gooiHandler);
                                     }
                                 }
                             };
                             
-                            // Bepaal of de 'hand' een VR controller is of de PC camera
                             this.isVRHand = this.hand.hasAttribute('laser-controls');
 
                             if (this.isVRHand) {
-                                // In VR gooi je door de trigger achterop in te drukken
-                                this.hand.addEventListener('triggerdown', this.gooiHandler);
+                                // Aangepast naar triggerup voor natuurlijk VR werpen
+                                this.hand.addEventListener('triggerup', this.gooiHandler);
                             } else {
-                                // Op PC gooi je met een nieuwe muisklik
                                 window.addEventListener('click', this.gooiHandler);
                             }
                         }, 100);
@@ -419,22 +504,22 @@
                 });
             },
             tick: function(t, dt) {
-                let d = dt / 1000;
+                const d = dt / 1000;
+                
                 if (this.status === 'vast' && this.hand) {
-                    let handPos = new THREE.Vector3();
-                    let handRot = new THREE.Quaternion();
-                    this.hand.object3D.getWorldPosition(handPos);
-                    this.hand.object3D.getWorldQuaternion(handRot);
+                    this.hand.object3D.getWorldPosition(this.handPos);
+                    this.hand.object3D.getWorldQuaternion(this.handRot);
                     
-                    // In VR zetten we de mok iets naar voren in de hand. Op PC iets voor de camera.
-                    let offsetZ = this.isVRHand ? -0.1 : -0.3;
-                    let offset = new THREE.Vector3(0, -0.05, offsetZ);
-                    offset.applyQuaternion(handRot);
+                    const offsetZ = this.isVRHand ? -0.1 : -0.3;
+                    const offset = new THREE.Vector3(0, -0.05, offsetZ);
+                    offset.applyQuaternion(this.handRot);
                     
-                    this.el.object3D.position.copy(handPos).add(offset);
-                    this.el.object3D.quaternion.copy(handRot);
+                    this.el.object3D.position.copy(this.handPos).add(offset);
+                    this.el.object3D.quaternion.copy(this.handRot);
+                    
                 } else if (this.status === 'gooi') {
                     this.snelheid.y -= 9.81 * d; 
+                    
                     this.el.object3D.position.x += this.snelheid.x * d;
                     this.el.object3D.position.y += this.snelheid.y * d;
                     this.el.object3D.position.z += this.snelheid.z * d;
@@ -443,7 +528,7 @@
                     if (this.el.object3D.position.y <= 0.1) {
                         this.el.object3D.position.y = 0.1;
                         this.status = 'idle';
-                        this.snelheid.set(0,0,0);
+                        this.snelheid.set(0, 0, 0);
                         this.el.object3D.rotation.x = 0; 
                         this.el.setAttribute('class', 'mok clickable'); 
                     }
@@ -452,18 +537,20 @@
         });
 
         // ==============================================
-        // 8. MUIS GEDRAG (Ongewijzigd)
+        // 8. MUIS GEDRAG
         // ==============================================
         AFRAME.registerComponent('muis-gedrag', {
             init: function() {
+                this.gameWereld = document.querySelector('#game-wereld');
                 this.el.sceneEl.addEventListener('renderstart', () => {
                     this.planVolgendeSprint();
                 });
             },
             planVolgendeSprint: function() {
-                let wachttijd = (Math.random() * 6000) + 4000;
+                const wachttijd = (Math.random() * 6000) + 4000;
+                
                 setTimeout(() => {
-                    let gameZichtbaar = document.querySelector('#game-wereld').getAttribute('visible');
+                    const gameZichtbaar = this.gameWereld.getAttribute('visible');
                     if (gameZichtbaar === true || gameZichtbaar === "true") {
                         this.startSprint();
                     } else {
@@ -472,27 +559,28 @@
                 }, wachttijd);
             },
             startSprint: function() {
-                let startX = (Math.random() * -8) - 1.5; 
-                let startZ = (Math.random() * 6) + 1;
-                let eindX = (Math.random() * -8) - 1.5;
-                let eindZ = (Math.random() * 6) + 1;
+                const startX = (Math.random() * -8) - 1.5; 
+                const startZ = (Math.random() * 6) + 1;
+                const eindX = (Math.random() * -8) - 1.5;
+                const eindZ = (Math.random() * 6) + 1;
 
-                let afstand = Math.sqrt(Math.pow(eindX - startX, 2) + Math.pow(eindZ - startZ, 2));
+                const afstand = Math.sqrt(Math.pow(eindX - startX, 2) + Math.pow(eindZ - startZ, 2));
+                
                 if (afstand < 3) { 
                     this.startSprint(); 
                     return; 
                 }
 
-                let dx = eindX - startX;
-                let dz = eindZ - startZ;
-                let hoekRad = Math.atan2(dx, dz);
-                let hoekDeg = hoekRad * (180 / Math.PI);
+                const dx = eindX - startX;
+                const dz = eindZ - startZ;
+                const hoekRad = Math.atan2(dx, dz);
+                const hoekDeg = hoekRad * (180 / Math.PI);
 
                 this.el.setAttribute('position', {x: startX, y: 0.02, z: startZ});
                 this.el.setAttribute('rotation', {x: 0, y: hoekDeg + 90, z: 0});
                 this.el.setAttribute('visible', 'true');
                 
-                let looptijd = afstand * 500; 
+                const looptijd = afstand * 500; 
 
                 this.el.setAttribute('animation__run', {
                     property: 'position',
@@ -516,7 +604,7 @@
         <a-assets>
             <a-asset-item id="kantoor-model" src="models/kantoor/scene.gltf"></a-asset-item>
             <a-asset-item id="mouse-model" src="models/mouse/scene.gltf"></a-asset-item>
-            <img id="plafond-tex" src="textures/Ceiling.jpg">
+            <img id="plafond-tex" src="textures/Ceiling.jpg" alt="Plafond Textuur">
             
             <audio id="snd-ambient" src="audio/kantoor-ambient.mp3" preload="auto"></audio>
             <audio id="snd-klik" src="audio/knop-klik.mp3" preload="auto"></audio>
