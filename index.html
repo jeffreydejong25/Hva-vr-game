@@ -145,13 +145,22 @@
                 });
             },
             startGame: function() {
+                document.querySelector('#fader-tekst').setAttribute('value', '');
                 this.fader.emit('fade-out');
                 document.querySelector('#audio-swoosh').components.sound.playSound();
 
                 setTimeout(() => {
                     this.menuWereld.setAttribute('visible', 'false');
                     this.gameWereld.setAttribute('visible', 'true');
-                    this.lucht.setAttribute('color', '#87CEEB'); 
+                    this.lucht.setAttribute('color', '#87CEEB');
+
+                    const cam = document.querySelector('#camera');
+                    cam.setAttribute('rotation', {x: 0, y: 90, z: 0});
+                    const lc = cam.components['look-controls'];
+                    if (lc) {
+                        lc.yawObject.rotation.y = THREE.MathUtils.degToRad(90);
+                        lc.pitchObject.rotation.x = 0;
+                    } 
 
                     const lvl = this.levels[this.huidigLevel];
 
@@ -159,10 +168,29 @@
                     this.scene.setAttribute('printer-spawner', {interval: lvl.interval});
 
                     this.scene.components['score-manager'].resetScore();
-                    this.scene.components['printer-spawner'].startSpawning();
 
                     document.querySelector('#audio-ambient').components.sound.playSound();
                     this.fader.emit('fade-in');
+
+                    const faderTekst = document.querySelector('#fader-tekst');
+                    const countdownNummers = [3, 2, 1, 'START!'];
+                    let stap = 0;
+
+                    const toonCountdown = () => {
+                        if (stap < countdownNummers.length) {
+                            faderTekst.setAttribute('value', countdownNummers[stap].toString());
+                            faderTekst.setAttribute('color', '#FFD166');
+                            faderTekst.setAttribute('opacity', '1');
+                            stap++;
+                            setTimeout(toonCountdown, 1000);
+                        } else {
+                            faderTekst.setAttribute('value', '');
+                            faderTekst.setAttribute('opacity', '0');
+                            this.scene.components['printer-spawner'].startSpawning();
+                        }
+                    };
+
+                    setTimeout(toonCountdown, 500);
                 }, 1000); 
             },
             endGame: function(gewonnen) {
@@ -186,7 +214,16 @@
 
                 setTimeout(() => {
                     this.speler.setAttribute('position', '-3 0 2');
-                    this.speler.components['muur-botsing'].vorigePos = { x: -3, z: 2 }; 
+                    this.speler.components['muur-botsing'].vorigePos = { x: -3, z: 2 };
+
+                    const cam = document.querySelector('#camera');
+                    cam.setAttribute('rotation', {x: 0, y: 0, z: 0});
+                    const lc = cam.components['look-controls'];
+                    if (lc) {
+                        lc.yawObject.rotation.y = 0;
+                        lc.pitchObject.rotation.x = 0;
+                    }
+
                     this.gameWereld.setAttribute('visible', 'false');
                     this.menuWereld.setAttribute('visible', 'true');
                     this.lucht.setAttribute('color', '#2B2D42'); 
@@ -422,6 +459,11 @@
                 pos.x += this.vx * d; 
                 pos.y += this.vy * d; 
                 pos.z += this.vz * d;
+
+                if (pos.x > -2) {
+                    pos.x = -2;
+                    this.vx = -Math.abs(this.vx) * 0.5;
+                }
                 
                 if (pos.y > 2.9) {
                     pos.y = 2.9; 
@@ -447,6 +489,11 @@
                     this.scene.components['score-manager'].verhoogMissers();
                     
                     this.el.removeAttribute('vangbaar'); 
+                    setTimeout(() => {
+                        if (this.el.parentNode) {
+                            this.el.parentNode.removeChild(this.el);
+                        }
+                    }, 10000);
                     this.el.removeAttribute('dwarrel-papier');
                 }
             }
@@ -542,9 +589,59 @@
         AFRAME.registerComponent('muis-gedrag', {
             init: function() {
                 this.gameWereld = document.querySelector('#game-wereld');
+                this.muren = document.querySelectorAll('.muur');
+                this.muisRadius = 0.18;
+                this.isSprinting = false;
+
+                this.el.addEventListener('animationcomplete__run', () => {
+                    if (!this.isSprinting) return;
+                    this.isSprinting = false;
+                    this.startSprint();
+                });
+
                 this.el.sceneEl.addEventListener('renderstart', () => {
                     this.planVolgendeSprint();
                 });
+            },
+            isPuntGeblokkeerd: function(x, z) {
+                const pL = x - this.muisRadius;
+                const pR = x + this.muisRadius;
+                const pT = z - this.muisRadius;
+                const pB = z + this.muisRadius;
+
+                for (let i = 0; i < this.muren.length; i++) {
+                    const muur = this.muren[i];
+                    const mPos = muur.getAttribute('position');
+                    const breedte = parseFloat(muur.getAttribute('width'));
+                    const diepte = parseFloat(muur.getAttribute('depth'));
+
+                    if (!mPos || isNaN(breedte) || isNaN(diepte)) continue;
+
+                    const mL = mPos.x - (breedte / 2);
+                    const mR = mPos.x + (breedte / 2);
+                    const mT = mPos.z - (diepte / 2);
+                    const mB = mPos.z + (diepte / 2);
+
+                    if (pR > mL && pL < mR && pB > mT && pT < mB) return true;
+                }
+
+                return false;
+            },
+            isPadVrij: function(startX, startZ, eindX, eindZ) {
+                const afstandX = eindX - startX;
+                const afstandZ = eindZ - startZ;
+                const afstand = Math.sqrt((afstandX * afstandX) + (afstandZ * afstandZ));
+                const stappen = Math.max(8, Math.ceil(afstand * 4));
+
+                for (let i = 0; i <= stappen; i++) {
+                    const t = i / stappen;
+                    const x = startX + (afstandX * t);
+                    const z = startZ + (afstandZ * t);
+
+                    if (this.isPuntGeblokkeerd(x, z)) return false;
+                }
+
+                return true;
             },
             planVolgendeSprint: function() {
                 const wachttijd = (Math.random() * 6000) + 4000;
@@ -558,17 +655,57 @@
                     }
                 }, wachttijd);
             },
-            startSprint: function() {
-                const startX = (Math.random() * -8) - 1.5; 
-                const startZ = (Math.random() * 6) + 1;
-                const eindX = (Math.random() * -8) - 1.5;
-                const eindZ = (Math.random() * 6) + 1;
+            tick: function() {
+                if (!this.isSprinting) return;
 
-                const afstand = Math.sqrt(Math.pow(eindX - startX, 2) + Math.pow(eindZ - startZ, 2));
-                
-                if (afstand < 3) { 
-                    this.startSprint(); 
-                    return; 
+                const gameZichtbaar = this.gameWereld.getAttribute('visible');
+                if (!(gameZichtbaar === true || gameZichtbaar === 'true')) return;
+
+                const pos = this.el.getAttribute('position');
+                if (!pos) return;
+
+                if (this.isPuntGeblokkeerd(pos.x, pos.z)) {
+                    this.isSprinting = false;
+                    this.el.removeAttribute('animation__run');
+                    this.el.setAttribute('visible', 'false');
+                    this.planVolgendeSprint();
+                }
+            },
+            startSprint: function() {
+                let startX = 0;
+                let startZ = 0;
+                let eindX = 0;
+                let eindZ = 0;
+                let afstand = 0;
+                let padGevonden = false;
+
+                for (let poging = 0; poging < 30; poging++) {
+                    startX = (Math.random() * -8) - 1.5;
+                    startZ = (Math.random() * 6) + 1;
+                    eindX = (Math.random() * -8) - 1.5;
+                    eindZ = (Math.random() * 6) + 1;
+
+                    if (this.isPuntGeblokkeerd(startX, startZ) || this.isPuntGeblokkeerd(eindX, eindZ)) {
+                        continue;
+                    }
+
+                    afstand = Math.sqrt(Math.pow(eindX - startX, 2) + Math.pow(eindZ - startZ, 2));
+
+                    if (afstand < 3) {
+                        continue;
+                    }
+
+                    if (!this.isPadVrij(startX, startZ, eindX, eindZ)) {
+                        continue;
+                    }
+
+                    padGevonden = true;
+                    break;
+                }
+
+                if (!padGevonden) {
+                    this.planVolgendeSprint();
+                    return;
                 }
 
                 const dx = eindX - startX;
@@ -581,6 +718,7 @@
                 this.el.setAttribute('visible', 'true');
                 
                 const looptijd = afstand * 500; 
+                this.isSprinting = true;
 
                 this.el.setAttribute('animation__run', {
                     property: 'position',
@@ -588,12 +726,6 @@
                     dur: looptijd,
                     easing: 'linear'
                 });
-
-                setTimeout(() => {
-                    this.el.setAttribute('visible', 'false');
-                    this.el.removeAttribute('animation__run'); 
-                    this.planVolgendeSprint();
-                }, looptijd);
             }
         });
     </script>
@@ -664,16 +796,18 @@
             <a-entity id="info-bord" position="3 1 -1.5" rotation="0 -50 0" visible="false" scale="1.2 1.2 1.2">
                 <a-box position="0 0 -0.05" width="3.3" height="2.3" depth="0.05" color="#FFD166" material="shader: flat"></a-box>
                 <a-box position="0 0 0" width="3.2" height="2.2" depth="0.05" color="#222222" material="shader: flat"></a-box>
-                <a-box position="0 0.7 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                <a-box position="0 0.8 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
                        dynamische-tekst="tekst: HET VERHAAL; bgKleur: #222222; kleur: #FFD166; fontSize: 70"></a-box>
-                <a-box position="0 0.45 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
-                       dynamische-tekst="tekst: De printer is op hol geslagen! Vang; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
-                <a-box position="0 0.25 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
-                       dynamische-tekst="tekst: alle belangrijke documenten.; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
+                <a-box position="0 0.6 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: De printer is op hol geslagen in ons kantoor!; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
+                <a-box position="0 0.4 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: Vang alle belangrijke documenten voordat; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
+                <a-box position="0 0.2 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
+                       dynamische-tekst="tekst: de muizen ze van de grond eten.; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
                 <a-box position="0 -0.1 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
                        dynamische-tekst="tekst: JOUW DOEL; bgKleur: #222222; kleur: #06D6A0; fontSize: 70"></a-box>
                 <a-box position="0 -0.35 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
-                       dynamische-tekst="tekst: Vang alles en manoeuvreer; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
+                       dynamische-tekst="tekst: Vang alle documenten en manoeuvreer; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
                 <a-box position="0 -0.55 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
                        dynamische-tekst="tekst: slim tussen de bureaus door.; bgKleur: #222222; kleur: #FFFFFF; fontSize: 40"></a-box>
                 <a-box position="0 -0.85 0.1" width="3" height="0.35" depth="0.05" material="shader: flat"
